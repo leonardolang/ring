@@ -285,7 +285,8 @@ pub use crate::rsa::{
     signing::RsaKeyPair,
     signing::RsaSubjectPublicKey,
     verification::{
-        RsaPublicKeyComponents, RSA_PKCS1_1024_8192_SHA1_FOR_LEGACY_USE_ONLY,
+        RsaPublicKeyComponents, RSA_PKCS1_512_8192_SHA256_FOR_LEGACY_USE_ONLY,
+        RSA_PKCS1_1024_8192_SHA1_FOR_LEGACY_USE_ONLY,
         RSA_PKCS1_1024_8192_SHA256_FOR_LEGACY_USE_ONLY,
         RSA_PKCS1_1024_8192_SHA512_FOR_LEGACY_USE_ONLY,
         RSA_PKCS1_2048_8192_SHA1_FOR_LEGACY_USE_ONLY, RSA_PKCS1_2048_8192_SHA256,
