@@ -59,6 +59,15 @@ macro_rules! rsa_params {
 }
 
 rsa_params!(
+    RSA_PKCS1_512_8192_SHA256_FOR_LEGACY_USE_ONLY,
+    512,
+    &super::padding::RSA_PKCS1_SHA256,
+    "Verification of signatures using RSA keys of 512-8192 bits,
+             PKCS#1.5 padding, and SHA-256.\n\nSee \"`RSA_PKCS1_*` Details\" in
+             `ring::signature`'s module-level documentation for more details."
+);
+
+rsa_params!(
     RSA_PKCS1_1024_8192_SHA1_FOR_LEGACY_USE_ONLY,
     1024,
     &super::padding::RSA_PKCS1_SHA1_FOR_LEGACY_USE_ONLY,
