@@ -118,6 +118,7 @@ fn cpp_flags(compiler: &cc::Tool) -> &'static [&'static str] {
         static NON_MSVC_FLAGS: &[&str] = &[
             "-pedantic",
             "-pedantic-errors",
+            "-Wno-error=inline",
             "-Wall",
             "-Wextra",
             "-Wcast-align",
