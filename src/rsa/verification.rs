@@ -14,13 +14,10 @@
 
 //! Verification of RSA signatures.
 
-use super::{parse_public_key, public, RsaParameters, N, PUBLIC_KEY_PUBLIC_MODULUS_MAX_LEN};
-use crate::{
-    arithmetic::{bigint, montgomery::Unencoded},
-    bits, cpu, digest, error,
-    limb::LIMB_BYTES,
-    sealed, signature,
+use super::{
+    parse_public_key, PublicExponent, PublicKey, RsaParameters, PUBLIC_KEY_PUBLIC_MODULUS_MAX_LEN,
 };
+use crate::{bits, cpu, digest, error, sealed, signature};
 
 impl signature::VerificationAlgorithm for RsaParameters {
     fn verify(
@@ -156,9 +153,9 @@ rsa_params!(
              `ring::signature`'s module-level documentation for more details."
 );
 
-pub use super::public::Components as RsaPublicKeyComponents;
+pub use super::PublicKeyComponents as RsaPublicKeyComponents;
 
-impl<B> super::public::Components<B>
+impl<B> super::PublicKeyComponents<B>
 where
     B: AsRef<[u8]>,
 {
@@ -188,7 +185,6 @@ where
         message: &[u8],
         signature: &[u8],
     ) -> Result<(), error::Unspecified> {
-        let _ = cpu::features();
         verify_rsa_(
             params,
             (
@@ -207,58 +203,29 @@ pub(crate) fn verify_rsa_(
     msg: untrusted::Input,
     signature: untrusted::Input,
 ) -> Result<(), error::Unspecified> {
-    let max_bits = bits::BitLength::from_usize_bytes(PUBLIC_KEY_PUBLIC_MODULUS_MAX_LEN)?;
+    let max_bits: bits::BitLength =
+        bits::BitLength::from_usize_bytes(PUBLIC_KEY_PUBLIC_MODULUS_MAX_LEN)?;
 
     // XXX: FIPS 186-4 seems to indicate that the minimum
     // exponent value is 2**16 + 1, but it isn't clear if this is just for
     // signing or also for verification. We support exponents of 3 and larger
     // for compatibility with other commonly-used crypto libraries.
-    let public::Key { n, e, n_bits } =
-        public::Key::from_modulus_and_exponent(n, e, params.min_bits, max_bits, 3)?;
-
-    // The signature must be the same length as the modulus, in bytes.
-    if signature.len() != n_bits.as_usize_bytes_rounded_up() {
-        return Err(error::Unspecified);
-    }
+    let key = PublicKey::from_modulus_and_exponent(
+        n,
+        e,
+        params.min_bits,
+        max_bits,
+        PublicExponent::_3,
+        cpu::features(),
+    )?;
 
     // RFC 8017 Section 5.2.2: RSAVP1.
-
-    // Step 1.
-    let s = bigint::Elem::from_be_bytes_padded(signature, &n)?;
-    if s.is_zero() {
-        return Err(error::Unspecified);
-    }
-
-    // Step 2.
-    let m = bigint::elem_exp_vartime(s, e, &n);
-    let m = m.into_unencoded(&n);
-
-    // Step 3.
     let mut decoded = [0u8; PUBLIC_KEY_PUBLIC_MODULUS_MAX_LEN];
-    let decoded = fill_be_bytes_n(m, n_bits, &mut decoded);
+    let decoded = key.exponentiate(signature, &mut decoded)?;
 
     // Verify the padded message is correct.
     let m_hash = digest::digest(params.padding_alg.digest_alg(), msg.as_slice_less_safe());
     untrusted::Input::from(decoded).read_all(error::Unspecified, |m| {
-        params.padding_alg.verify(&m_hash, m, n_bits)
+        params.padding_alg.verify(m_hash, m, key.n().len_bits())
     })
-}
-
-/// Returns the big-endian representation of `elem` that is
-/// the same length as the minimal-length big-endian representation of
-/// the modulus `n`.
-///
-/// `n_bits` must be the bit length of the public modulus `n`.
-fn fill_be_bytes_n(
-    elem: bigint::Elem<N, Unencoded>,
-    n_bits: bits::BitLength,
-    out: &mut [u8; PUBLIC_KEY_PUBLIC_MODULUS_MAX_LEN],
-) -> &[u8] {
-    let n_bytes = n_bits.as_usize_bytes_rounded_up();
-    let n_bytes_padded = ((n_bytes + (LIMB_BYTES - 1)) / LIMB_BYTES) * LIMB_BYTES;
-    let out = &mut out[..n_bytes_padded];
-    elem.fill_be_bytes(out);
-    let (padding, out) = out.split_at(n_bytes_padded - n_bytes);
-    assert!(padding.iter().all(|&b| b == 0));
-    out
 }

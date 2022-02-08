@@ -1,4 +1,4 @@
-// Copyright 2015-2016 Brian Smith.
+// Copyright 2015-2021 Brian Smith.
 //
 // Permission to use, copy, modify, and/or distribute this software for any
 // purpose with or without fee is hereby granted, provided that the above
@@ -11,8 +11,6 @@
 // WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
 // OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
 // CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
-
-#![cfg(any(not(target_arch = "wasm32"), feature = "wasm32_c"))]
 
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_test::{wasm_bindgen_test as test, wasm_bindgen_test_configure};
@@ -68,6 +66,7 @@ macro_rules! test_aead {
                             opening_key_open_within,
                             sealing_key_seal_in_place_append_tag,
                             sealing_key_seal_in_place_separate_tag,
+                            test_open_in_place_seperate_tag,
                         ]);
 
                     #[test]
@@ -187,6 +186,41 @@ where
 
     assert_eq!(actual_plaintext, tc.plaintext);
     assert_eq!(&in_out[..tc.plaintext.len()], tc.plaintext);
+    Ok(())
+}
+
+fn test_open_in_place_seperate_tag(
+    alg: &'static aead::Algorithm,
+    tc: KnownAnswerTestCase,
+) -> Result<(), error::Unspecified> {
+    let key = make_less_safe_key(alg, tc.key);
+
+    let mut in_out = Vec::from(tc.ciphertext);
+    let tag = tc.tag.try_into().unwrap();
+
+    // Test the simplest behavior.
+    {
+        let nonce = aead::Nonce::assume_unique_for_key(tc.nonce);
+        let actual_plaintext =
+            key.open_in_place_separate_tag(nonce, tc.aad, tag, &mut in_out, 0..)?;
+
+        assert_eq!(actual_plaintext, tc.plaintext);
+        assert_eq!(&in_out[..tc.plaintext.len()], tc.plaintext);
+    }
+
+    // Test that ciphertext range shifing works as expected.
+    {
+        let range = in_out.len()..;
+        in_out.extend_from_slice(tc.ciphertext);
+
+        let nonce = aead::Nonce::assume_unique_for_key(tc.nonce);
+        let actual_plaintext =
+            key.open_in_place_separate_tag(nonce, tc.aad, tag, &mut in_out, range)?;
+
+        assert_eq!(actual_plaintext, tc.plaintext);
+        assert_eq!(&in_out[..tc.plaintext.len()], tc.plaintext);
+    }
+
     Ok(())
 }
 
@@ -473,6 +507,13 @@ fn aead_test_aad_traits() {
 fn test_tag_traits() {
     test::compile_time_assert_send::<aead::Tag>();
     test::compile_time_assert_sync::<aead::Tag>();
+
+    test::compile_time_assert_copy::<aead::Tag>();
+    test::compile_time_assert_clone::<aead::Tag>();
+
+    let tag = aead::Tag::from([4u8; 16]);
+    let _tag_2 = tag; // Cover `Copy`
+    assert_eq!(tag.as_ref(), tag.clone().as_ref()); // Cover `Clone`
 }
 
 #[test]

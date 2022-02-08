@@ -12,10 +12,14 @@
 // OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
 // CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
+use super::PublicKey;
+use core::iter::FromIterator;
+
 /// RSA public key components.
 ///
 /// `B` must implement `AsRef<[u8]>` like `&[u8]` or `Vec<u8>`.
-pub struct Components<B> {
+#[derive(Clone, Copy)]
+pub struct PublicKeyComponents<B> {
     /// The public modulus, encoded in big-endian bytes without leading zeros.
     pub n: B,
 
@@ -23,28 +27,26 @@ pub struct Components<B> {
     pub e: B,
 }
 
-impl<B> Copy for Components<B> where B: Copy {}
-
-impl<B> Clone for Components<B>
-where
-    B: Clone,
-{
-    fn clone(&self) -> Self {
-        Self {
-            n: self.n.clone(),
-            e: self.e.clone(),
-        }
-    }
-}
-
-impl<B> core::fmt::Debug for Components<B>
+impl<B> core::fmt::Debug for PublicKeyComponents<B>
 where
     B: core::fmt::Debug,
 {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> Result<(), core::fmt::Error> {
-        f.debug_struct("Components")
+        f.debug_struct("PublicKeyComponents")
             .field("n", &self.n)
             .field("e", &self.e)
             .finish()
+    }
+}
+
+impl<B> From<&PublicKey> for PublicKeyComponents<B>
+where
+    B: FromIterator<u8>,
+{
+    fn from(public_key: &PublicKey) -> Self {
+        Self {
+            n: public_key.n().be_bytes().collect(),
+            e: public_key.e().be_bytes().collect(),
+        }
     }
 }

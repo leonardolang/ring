@@ -18,9 +18,9 @@
 //! Limbs ordered least-significant-limb to most-significant-limb. The bits
 //! limbs use the native endianness.
 
-use crate::{c, error};
+use crate::{c, error, polyfill::ArrayFlatMap};
 
-#[cfg(feature = "alloc")]
+#[cfg(any(test, feature = "alloc"))]
 use crate::bits;
 
 #[cfg(feature = "alloc")]
@@ -86,13 +86,13 @@ pub fn limbs_are_zero_constant_time(limbs: &[Limb]) -> LimbMask {
     unsafe { LIMBS_are_zero(limbs.as_ptr(), limbs.len()) }
 }
 
-#[cfg(feature = "alloc")]
+#[cfg(any(test, feature = "alloc"))]
 #[inline]
 pub fn limbs_are_even_constant_time(limbs: &[Limb]) -> LimbMask {
     unsafe { LIMBS_are_even(limbs.as_ptr(), limbs.len()) }
 }
 
-#[cfg(feature = "alloc")]
+#[cfg(any(test, feature = "alloc"))]
 #[inline]
 pub fn limbs_equal_limb_constant_time(a: &[Limb], b: Limb) -> LimbMask {
     unsafe { LIMBS_equal_limb(a.as_ptr(), b, a.len()) }
@@ -105,7 +105,7 @@ pub fn limbs_equal_limb_constant_time(a: &[Limb], b: Limb) -> LimbMask {
 // with respect to `a.len()` or the value of the result or the value of the
 // most significant bit (It's 1, unless the input is zero, in which case it's
 // zero.)
-#[cfg(feature = "alloc")]
+#[cfg(any(test, feature = "alloc"))]
 pub fn limbs_minimal_bits(a: &[Limb]) -> bits::BitLength {
     for num_limbs in (1..=a.len()).rev() {
         let high_limb = a[num_limbs - 1];
@@ -237,16 +237,23 @@ pub fn parse_big_endian_and_pad_consttime(
 }
 
 pub fn big_endian_from_limbs(limbs: &[Limb], out: &mut [u8]) {
-    let num_limbs = limbs.len();
-    let out_len = out.len();
-    assert_eq!(out_len, num_limbs * LIMB_BYTES);
-    for i in 0..num_limbs {
-        let mut limb = limbs[i];
-        for j in 0..LIMB_BYTES {
-            out[((num_limbs - i - 1) * LIMB_BYTES) + (LIMB_BYTES - j - 1)] = (limb & 0xff) as u8;
-            limb >>= 8;
-        }
-    }
+    let be_bytes = unstripped_be_bytes(limbs);
+    assert_eq!(out.len(), be_bytes.len());
+    out.iter_mut().zip(be_bytes).for_each(|(o, i)| {
+        *o = i;
+    });
+}
+
+/// Returns an iterator of the big-endian encoding of `limbs`.
+///
+/// The number of bytes returned will be a multiple of `LIMB_BYTES`
+/// and thus may be padded with leading zeros.
+pub fn unstripped_be_bytes(limbs: &[Limb]) -> impl ExactSizeIterator<Item = u8> + Clone + '_ {
+    // The unwrap is safe because a slice can never be larger than `usize` bytes.
+    ArrayFlatMap::new(limbs.iter().rev().copied(), |limb| {
+        core::array::IntoIter::new(Limb::to_be_bytes(limb))
+    })
+    .unwrap()
 }
 
 #[cfg(feature = "alloc")]
@@ -352,11 +359,15 @@ prefixed_extern! {
     fn LIMBS_reduce_once(r: *mut Limb, m: *const Limb, num_limbs: c::size_t);
 }
 
-#[cfg(feature = "alloc")]
+#[cfg(any(test, feature = "alloc"))]
 prefixed_extern! {
     fn LIMB_shr(a: Limb, shift: c::size_t) -> Limb;
     fn LIMBS_are_even(a: *const Limb, num_limbs: c::size_t) -> LimbMask;
     fn LIMBS_equal_limb(a: *const Limb, b: Limb, num_limbs: c::size_t) -> LimbMask;
+}
+
+#[cfg(feature = "alloc")]
+prefixed_extern! {
     fn LIMBS_less_than_limb(a: *const Limb, b: Limb, num_limbs: c::size_t) -> LimbMask;
 }
 

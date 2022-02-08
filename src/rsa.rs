@@ -17,7 +17,7 @@
 // naming conventions. Also the standard camelCase names are used for `KeyPair`
 // components.
 
-//! Low-level RSA primitives.
+//! RSA.
 
 use crate::{
     arithmetic::bigint,
@@ -58,10 +58,20 @@ fn parse_public_key(
 #[derive(Copy, Clone)]
 enum N {}
 
-unsafe impl bigint::PublicModulus for N {}
+impl bigint::PublicModulus for N {}
 
-pub mod public;
+mod keypair;
+mod keypair_components;
+mod public_exponent;
+mod public_key;
+mod public_key_components;
+mod public_modulus;
 
 pub(crate) mod verification;
 
-pub(crate) mod signing;
+use self::{public_exponent::PublicExponent, public_modulus::PublicModulus};
+
+pub use self::{
+    keypair::KeyPair, keypair_components::KeyPairComponents, public_key::PublicKey,
+    public_key_components::PublicKeyComponents,
+};
